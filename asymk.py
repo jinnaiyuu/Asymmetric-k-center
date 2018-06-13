@@ -13,10 +13,28 @@ import math
 from numpy import linalg
 from scipy.optimize import linprog
 
+from ortools.constraint_solver import pywrapcp
+
 def onehot(length, i):
     ret = np.zeros(length, dtype=int)
     ret[i] = 1
     return ret
+
+def GetRadius(D, C):
+    nV = D.shape[0]
+
+    maxd = -1
+    for i in range(nV):
+        mind = 10000
+        for c in range(nV):
+            if C[c] == 1:
+                dic = D[c][i]
+                if dic < mind:
+                    mind = dic
+        if mind > maxd:
+            maxd = mind
+
+    return maxd
 
 def DeriveGraph(D, R):
     """
@@ -240,34 +258,64 @@ def AKC_OPT(D, k):
     print("TODO: AKC_OPT is implemented by incrementing the R one by one.")
     print("This is not efficient: binary search over R.")
     R = 0
-    centers = AKC(D, k, R)
+    centers = None
     while centers is None:
         R += 1
+        print("#################################################")
+        print("#################################################")
+        print("AKC: R = ", R)
         centers = AKC(D, k, R)
         
     return AKC(D, k, R), R
 
-def GetRadius(D, C):
-    nV = D.shape[0]
+def asymkCSP(D, k):
+    """
+    Solve the Asymmetric k-center problem exactly using Google's OR tools.
+    """
+    solver = pywrapcp.Solver("Asymk")
+    nNodes = D.shape[0]
+    maxDistance = np.amax(D)
+    centers = [solver.IntVar(0, 1, "iscenter%i" % i) for i in range(nNodes)]
+    minDistances = [solver.IntVar(0, maxDistance, "min d(%i, C)" % i) for i in range(nNodes)]
+    maxminDistance = solver.IntVar(0, maxDistance, "max min d")
 
-    maxd = -1
-    for i in range(nV):
-        mind = 10000
-        for c in range(nV):
-            if C[c] == 1:
-                dic = D[c][i]
-                if dic < mind:
-                    mind = dic
-        if mind > maxd:
-            maxd = mind
+    cDist = [solver.IntVar(0, maxDistance, "d(i,j)") for i in range(nNodes*nNodes)]
+    for i in range(nNodes):
+        for j in range(nNodes):
+            solver.Add(solver.Max(solver.Min(cDist[i * nNodes + j] == D[i][j], centers[j] == 1), cDist[i * nNodes + j] == nNodes) == 1)
 
-    return maxd
+    for i in range(nNodes):
+        solver.Add(minDistances[i] == solver.Min(cDist[i * nNodes:(i+1) * nNodes]))
+    
+    solver.Add(solver.Max(minDistances) == maxminDistance)
+
+    solver.Add(solver.Sum(centers) == k)
+    
+    objective = solver.Minimize(maxminDistance, 1)
+    variables = centers + minDistances + [maxminDistance]
+    decisionBuilder = solver.Phase(variables,
+                                   solver.CHOOSE_FIRST_UNBOUND,
+                                   solver.ASSIGN_MIN_VALUE)
+    collector = solver.LastSolutionCollector()
+    collector.Add(variables)
+    # collector.Add(minDistances)
+    collector.AddObjective(maxminDistance)
+    solver.Solve(decisionBuilder, [objective, collector])
+    if collector.SolutionCount() > 0:
+        bestSolution = collector.SolutionCount() - 1
+        print("maxmin d =", collector.ObjectiveValue(bestSolution))
+        for i in range(nNodes):
+            print("iscenter[", i, "] =", collector.Value(bestSolution, variables[i]))
+        for i in range(nNodes):
+            print("minDistances[", i, "] =", collector.Value(bestSolution, variables[i + nNodes]))
 
 if __name__ == "__main__":    
     D = np.array([[0, 1, 2], [100, 0, 1], [100, 100, 0]])
     k = 1
-    # C, R = AKC_OPT(D, k)
-    C = AKC(D, 1, 1)
+
+    # asymkCSP(D, k)
+    
+    C, Rbound = AKC_OPT(D, k)
     R = GetRadius(D, C)
     
     print("Centers=", C)
