@@ -88,6 +88,8 @@ def CCV(Gr, A):
 
 def Reduce(Gr):
     """
+    Find center capturing vertices (CCVs) to reduce the size of the graph.
+    Vertices picked here will be a part of the set of centers.
     """
     M = Gr.shape[0]
     A = np.ones((M,), dtype=int)
