@@ -13,8 +13,6 @@ import math
 from numpy import linalg
 from scipy.optimize import linprog
 
-from ortools.constraint_solver import pywrapcp
-
 def onehot(length, i):
     ret = np.zeros(length, dtype=int)
     ret[i] = 1
@@ -254,7 +252,7 @@ def AKC(D, k, R):
         C = Augment(Ghat, A, C, y, p)
         return C
 
-def AKC_OPT(D, k):
+def AKC_APPROX(D, k):
     print("TODO: AKC_OPT is implemented by incrementing the R one by one.")
     print("This is not efficient: binary search over R.")
     R = 0
@@ -266,15 +264,17 @@ def AKC_OPT(D, k):
         print("AKC: R = ", R)
         centers = AKC(D, k, R)
         
-    return AKC(D, k, R), R
+    return centers, R
 
-def asymkCSP(D, k):
+def AKC_OPT(D, k):
     """
     Solve the Asymmetric k-center problem exactly using Google's OR tools.
     """
+    from ortools.constraint_solver import pywrapcp
     solver = pywrapcp.Solver("Asymk")
     nNodes = D.shape[0]
     maxDistance = np.amax(D)
+    print "maxDistance=", maxDistance
     centers = [solver.IntVar(0, 1, "iscenter%i" % i) for i in range(nNodes)]
     minDistances = [solver.IntVar(0, maxDistance, "min d(%i, C)" % i) for i in range(nNodes)]
     maxminDistance = solver.IntVar(0, maxDistance, "max min d")
@@ -282,17 +282,24 @@ def asymkCSP(D, k):
     cDist = [solver.IntVar(0, maxDistance, "d(i,j)") for i in range(nNodes*nNodes)]
     for i in range(nNodes):
         for j in range(nNodes):
-            solver.Add(solver.Max(solver.Min(cDist[i * nNodes + j] == D[i][j], centers[j] == 1), cDist[i * nNodes + j] == nNodes) == 1)
+            # if centers[j] == 1:
+            #     cDist[i, j] = D[i][j]
+            # else:
+            #     cDist[i, j] = maxDistance
+
+            # (center[j] == 1 AND cDist[i,j] == D[i][j]) OR (cDist[i,j] == maxDistance)
+            solver.Add(solver.Max(solver.Min(cDist[i * nNodes + j] == D[i][j], centers[j] == 1), (cDist[i * nNodes + j] == maxDistance)) == 1)
 
     for i in range(nNodes):
         solver.Add(minDistances[i] == solver.Min(cDist[i * nNodes:(i+1) * nNodes]))
+
     
     solver.Add(solver.Max(minDistances) == maxminDistance)
 
     solver.Add(solver.Sum(centers) == k)
     
     objective = solver.Minimize(maxminDistance, 1)
-    variables = centers + minDistances + [maxminDistance]
+    variables = centers + minDistances + [maxminDistance] + cDist
     decisionBuilder = solver.Phase(variables,
                                    solver.CHOOSE_FIRST_UNBOUND,
                                    solver.ASSIGN_MIN_VALUE)
@@ -301,21 +308,41 @@ def asymkCSP(D, k):
     # collector.Add(minDistances)
     collector.AddObjective(maxminDistance)
     solver.Solve(decisionBuilder, [objective, collector])
+
+    C = np.zeros(nNodes, dtype=int)
+    # print "collector =", collector
     if collector.SolutionCount() > 0:
         bestSolution = collector.SolutionCount() - 1
         print("maxmin d =", collector.ObjectiveValue(bestSolution))
         for i in range(nNodes):
             print("iscenter[", i, "] =", collector.Value(bestSolution, variables[i]))
+            C[i] = collector.Value(bestSolution, variables[i])
         for i in range(nNodes):
             print("minDistances[", i, "] =", collector.Value(bestSolution, variables[i + nNodes]))
+        R = collector.Value(bestSolution, variables[2 * nNodes])
+
+        # for i in range(nNodes):
+        #     for j in range(nNodes):
+        #         print("cDist[", i, "][", j, "] =", collector.Value(bestSolution, variables[2 * nNodes + 1 + i * nNodes + j]))
+                
+
+        return C, R
+    else:
+        print("NO SOLUTION FOUND!")    
 
 if __name__ == "__main__":    
-    D = np.array([[0, 1, 2], [100, 0, 1], [100, 100, 0]])
-    k = 1
+    D = np.array([[0, 1, 2, 3],
+                  [2, 0, 1, 2],
+                  [1, 1, 0, 1],
+                  [0, 0, 0, 0]])
 
-    # asymkCSP(D, k)
+    # D = np.array([[1, 0], [0, 0]], dtype=int)
+    # d = D.transpose()
+    k = 1
     
-    C, Rbound = AKC_OPT(D, k)
+    # C, R = AKC_OPT(D, k)
+    
+    C, Rbound = AKC_APPROX(D, k)
     R = GetRadius(D, C)
     
     print("Centers=", C)
