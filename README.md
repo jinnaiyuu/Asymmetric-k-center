@@ -31,8 +31,11 @@ You do not need ortools to run AKC_APPROX.
 # Literature
 
 (Archer 2001) Archer, Aaron. "Two O (log* k)-approximation algorithms for the asymmetric k-center problem." International Conference on Integer Programming and Combinatorial Optimization. Springer, Berlin, Heidelberg, 2001.
+
 (Lewis 1983) Lewis, Harry R. "Computers and Intractability. A Guide to the Theory of NP-Completeness." (1983): 498-500.
-(Chuzhoy 2004) Chuzhoy, Julia, et al. "Asymmetric k-center is log* n-hard to approximate." Journal of the ACM (JACM) 52.4 (2005): 538-551..
+
+(Chuzhoy 2004) Chuzhoy, Julia, et al. "Asymmetric k-center is log* n-hard to approximate." Journal of the ACM (JACM) 52.4 (2005): 538-551.
+
 (Panigrahy 1998) Panigrahy, Rina, and Sundar Vishwanathan. "An O(log* n) Approximation Algorithm for the Asymmetric p-Center Problem." Journal of Algorithms 27.2 (1998): 259-268.
 
 # Author
